@@ -16,11 +16,11 @@ Storage Tier: An S3 Bucket for general storage, with a compliant, all-lowercase 
 
 📂 Project Files
 
-File
-
-Description
-
-template.yaml
+Architecture_diagram.png # this architecture 
+resources.png andoutput.png # shoe sandbox results
+diagram.html #general architecture standard
+infrastracture_composer #AWS extensions integrated in VS code that generates a diagraf of all the resources used
+template.yaml #run it in AWS cloud formation as new stack
 
 The complete CloudFormation YAML template defining all resources and their dependencies, as per the task requirements.
 

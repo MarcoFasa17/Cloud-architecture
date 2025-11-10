@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3-Tier Architecture Flow</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0d1117; 
+            color: #c9d1d9; 
+        }
+        .tier-card {
+            min-height: 150px;
+            @apply bg-gray-800 p-6 rounded-xl shadow-2xl border-2 border-green-500/50 transition-all duration-300 hover:shadow-green-500/30;
+        }
+        /* Keeping flow-block simple for spacing, relying on inline classes for centering now */
+        .flow-block {
+            @apply my-6; 
+        }
+        .arrow-icon {
+            @apply text-green-400 text-3xl font-bold;
+        }
+        /* Added font-bold for emphasis on the connection label */
+        .connection-label {
+            @apply text-sm font-bold text-gray-200 mt-3 bg-gray-900 px-3 py-1 rounded-full border border-gray-700 shadow-md text-center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="p-6 md:p-12">
+    <h1 class="text-4xl font-extrabold mb-2 text-center text-green-400">AWS 3-Tier Conceptual Map</h1>
+    <p class="text-center text-gray-400 mb-10">Visualizing the flow from the internet "Gate" to the data tiers.</p>
+
+    <!-- FLOW START: INTERNET SOURCE -->
+    <div class="max-w-xl mx-auto text-center mb-8">
+        <div class="p-4 bg-blue-600 rounded-full inline-block shadow-lg">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-8 h-8 text-white">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 100-18 9 9 0 000 18zm0 0l-4.75-4.75M12 21l4.75-4.75M12 21V3m4.75 4.75L7.25 16.25M16.25 7.25L7.25 16.25" />
+            </svg>
+        </div>
+        <div class="text-lg font-semibold mt-2">Internet (Incoming Request)</div>
+    </div>
+
+    <!-- FLOW BLOCK 1: THE GATE (CRITICAL FIX APPLIED HERE) -->
+    <div class="flow-block flex flex-col items-center">
+        <span class="arrow-icon">↓</span>
+        <span class="connection-label">The Gate (Internet Gateway)</span>
+    </div>
+
+    <!-- TIER 1: VPC ENTRANCE -->
+    <div class="max-w-2xl mx-auto tier-card border-blue-500/50">
+        <div class="text-xl font-bold text-blue-300">A. VPC Boundary & Internet Gateway</div>
+        <p class="mt-2 text-sm">The **Internet Gateway** (`InternetGateway`) is the public entrance, attached to the VPC. Traffic is then passed to the Public Route Table.</p>
+    </div>
+
+    <!-- FLOW BLOCK 2: PUBLIC ROUTING (CRITICAL FIX APPLIED HERE) -->
+    <div class="flow-block flex flex-col items-center">
+        <span class="arrow-icon">↓</span>
+        <span class="connection-label">Public Route Table (Routes 0.0.0.0/0)</span>
+    </div>
+
+    <!-- TIER 2: PUBLIC (WEB) TIER -->
+    <div class="max-w-4xl mx-auto tier-card border-yellow-500/50">
+        <div class="text-xl font-bold text-yellow-300">B. The Public Tier (Web Servers)</div>
+        <div class="mt-4 grid md:grid-cols-2 gap-4">
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h3 class="font-semibold text-base text-white">Public Subnet (10.0.1.0/24)</h3>
+                <p class="text-xs text-gray-400">Allows Public IP Assignment for accessibility.</p>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h3 class="font-semibold text-base text-white">EC2 Instance (`EC2Instance`)</h3>
+                <p class="text-xs text-gray-400">Secured by `EC2SecurityGroup` (Ports 22/80 open).</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLOW BLOCK 3: INTERNAL DB CALL (CRITICAL FIX APPLIED HERE) -->
+    <div class="flow-block flex flex-col items-center">
+        <span class="arrow-icon">↓</span>
+        <span class="connection-label">Internal DB Connection (Port 3306)</span>
+    </div>
+
+    <!-- TIER 3: PRIVATE (DATA) TIER -->
+    <div class="max-w-4xl mx-auto tier-card border-red-500/50">
+        <div class="text-xl font-bold text-red-300">C. The Private Tier (Databases)</div>
+        <div class="mt-4 grid md:grid-cols-2 gap-4">
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h3 class="font-semibold text-base text-white">Private Subnets (AZ1 & AZ2)</h3>
+                <p class="text-xs text-gray-400">No public access routes. Fully private.</p>
+            </div>
+            <div class="bg-gray-700 p-4 rounded-lg">
+                <h3 class="font-semibold text-base text-white">RDS Instance (`RDSInstance`)</h3>
+                <p class="text-xs text-gray-400">Secured by `DBSecurityGroup`, only allowing traffic *from* the EC2 Security Group.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- FLOW BLOCK 4: STORAGE ACCESS (CRITICAL FIX APPLIED HERE) -->
+    <div class="flow-block mt-8 flex flex-col items-center">
+        <span class="arrow-icon">⟷</span>
+        <span class="connection-label">S3 Access (IAM-Controlled)</span>
+    </div>
+
+    <!-- TIER 4: STORAGE TIER -->
+    <div class="max-w-2xl mx-auto tier-card border-purple-500/50">
+        <div class="text-xl font-bold text-purple-300">II. The Storage Tier (The Vault)</div>
+        <p class="mt-2 text-sm">**S3 Bucket** (`S3Bucket`). Sits outside the VPC network. Access is governed by **IAM permissions**.</p>
+    </div>
+
+</div>
+
+</body>
+</html>

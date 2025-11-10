@@ -1,0 +1,237 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Complete 3-Tier AWS Architecture with EC2 (Web), RDS (DB), and S3 (Storage).
+
+# --- PARAMETERS SECTION ---
+Parameters:
+  # The KeyName parameter is removed as requested and hardcoded in the EC2Instance resource.
+
+  EnvironmentType:
+    Type: String
+    Description: Environment for this stack (e.g., dev or prod).
+    Default: dev
+    AllowedValues:
+      - dev
+      - prod
+
+# NOTE: DBName, DBUser, and DBPassword parameters have been removed and hardcoded below.
+
+
+# --- RESOURCES SECTION (Updated) ---
+Resources:
+
+  # 1. VPC (Networking Foundation)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC
+
+  # 2. Internet Gateway and Attachment
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-IGW
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # 3. Subnets (One Public, Two Private for RDS Multi-AZ)
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+        # AZ 1
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true # CRITICAL for EC2 Public Access
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnet-AZ1
+
+  PrivateSubnetAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 0
+        - !GetAZs ''
+        # AZ 1
+      CidrBlock: 10.0.2.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnet-AZ1
+
+  PrivateSubnetAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select
+        - 1
+        - !GetAZs ''
+        # AZ 2 (For Multi-AZ RDS)
+      CidrBlock: 10.0.3.0/24
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnet-AZ2
+
+  # 4. Route Tables (Public and Private)
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicRT
+
+  PublicInternetRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # 5. Security Groups
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH (22) and HTTP (80) to Web Server
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0 # Allow SSH from anywhere (restrict in prod!)
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0 # Allow HTTP from anywhere
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-EC2-SG
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow MySQL traffic only from the EC2 Web Server
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          # Allow ingress only from the EC2 Security Group
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-DB-SG
+
+  # 6. EC2 Instance (Web Tier) - UPDATED KEYNAME
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: ami-00e15f0027b9bf02b
+      InstanceType: t3.micro
+      KeyName: keytest10
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Web-Server
+        - Key: Environment
+          Value: !Ref EnvironmentType
+      UserData:
+        # Install a basic web server (Apache)
+        !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          # Use dnf for Amazon Linux 2023
+          dnf update -y
+          dnf install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          echo "<h1>CloudFormation 3-Tier Stack Deployed (AL2023)</h1>" > /var/www/html/index.html
+
+  # 7. RDS Database (Data Tier) - HARDCODED VALUES
+  RDSSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets for RDS instance
+      SubnetIds:
+        # Use both private subnets for Multi-AZ support
+        - !Ref PrivateSubnetAZ1
+        - !Ref PrivateSubnetAZ2
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-RDS-SubnetGroup
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+
+      DBName: threeTierDB
+      Engine: mysql
+      MasterUsername: dbmaster
+      MasterUserPassword: MySecurePass123!
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: '20'
+      DBSubnetGroupName: !Ref RDSSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      MultiAZ: 'true' # Set to true for high availability
+      PubliclyAccessible: 'false' # Must be false to be private
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-MySQL-DB
+        - Key: Environment
+          Value: !Ref EnvironmentType
+
+  # 8. S3 Bucket (Storage Tier)
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${AWS::StackName}-${AWS::AccountId}-storage-bucket
+      VersioningConfiguration:
+        Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Storage-Bucket
+        - Key: Environment
+          Value: !Ref EnvironmentType
+
+# --- OUTPUTS SECTION ---
+Outputs:
+  WebUrl:
+    Description: URL of the web server
+    Value: !Sub http://${EC2Instance.PublicIp}
+    Export:
+      Name: !Sub ${AWS::StackName}-WebUrl
+
+  DatabaseEndpoint:
+    Description: RDS Database Endpoint Address
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub ${AWS::StackName}-DBEndpoint
+
+  S3BucketName:
+    Description: Name of the S3 Storage Bucket
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub ${AWS::StackName}-S3BucketName
